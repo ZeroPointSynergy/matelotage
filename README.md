@@ -51,9 +51,11 @@ MATELOTAGE_MODE=mirror    # default
 MATELOTAGE_MODE=keeper
 ```
 
-**`mirror`** serves only the operator's own records, and only for repos Pirate Face still publishes.
-A fresh install can therefore never serve something the site didn't. This is the mode a maintainer
-can adopt without taking a position on anything.
+**`mirror`** serves records signed by the operator's own keys — the first two entries in
+`MATELOTAGE_NPUBS`, the cold root and the publisher — and only for repos Pirate Face still publishes.
+A fresh install can therefore never serve something the site didn't, and a fill-in keeper at index 2+
+can never redirect a repo the operator already signed. This is the mode a maintainer can adopt
+without taking a position on anything.
 
 **`keeper`** serves any record signed by a key you trust — including models Pirate Face never
 listed. You choose whose word you take by choosing whose npub is in `MATELOTAGE_NPUBS`.
@@ -101,7 +103,9 @@ release.
 
 - Relay event budget: **32 000 bytes**, measured against the default relays; a record that would
   not fit drops its inline torrent rather than its file manifest.
-- Relay timeout: **1.5 s**. A relay that opens a socket and says nothing counts as failed.
+- Relay timeout: **1.5 s** per relay, queried concurrently. A resolution runs two queries, so a
+  set of dead relays costs about **3 s** before the standard Hugging Face path takes over; two total
+  misses in a row open a 60 s breaker and later lookups return instantly.
 - Circuit breaker: two lookups where no relay answered → 60 s of silence.
 - Manifest hashes are real SHA-256 of the bytes. (Pirate Face's API mixes git blob ids and LFS
   hashes; we recompute, we do not copy.)

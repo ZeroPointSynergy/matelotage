@@ -538,6 +538,15 @@ def generate_keypair() -> tuple[str, str, str]:
     return hex_to_bech32(secret.hex(), "nsec"), hex_to_bech32(pubkey_hex, "npub"), pubkey_hex
 
 
+def pubkey_from_nsec(nsec_or_hex: str) -> str:
+    """The x-only public key (64-hex) a signing key corresponds to."""
+    from coincurve import PrivateKey
+
+    return PrivateKey(bytes.fromhex(bech32_to_hex(nsec_or_hex, "nsec"))).public_key.format(
+        compressed=True
+    )[1:].hex()
+
+
 def build_signed_event(
     nsec_or_hex_sk: str, repo_id: str, content_obj: NostrModelContent, created_at: int | None = None
 ) -> dict[str, Any]:

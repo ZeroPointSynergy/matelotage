@@ -156,7 +156,7 @@ def install(module=None) -> bool:
 
 
 def uninstall() -> bool:
-    """Put the originals back. Used by tests and by `mlt doctor --restore`."""
+    """Put the originals back. Used by the tests and by `mlt uninstall`."""
     global _installed
     if not _installed:
         return False

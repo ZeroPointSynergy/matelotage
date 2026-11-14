@@ -89,7 +89,28 @@ def _fetch(args) -> int:
     return 0
 
 
+def _require_trusted(nsec: str, force: bool) -> None:
+    """A signature nobody is allowed to accept is a wasted replaceable slot, not a publication."""
+    try:
+        keys = index.get_trusted_pubkeys()
+    except Exception:  # configuration problems are reported by `mlt doctor`
+        return
+    if not keys:
+        return
+    signer = schema.pubkey_from_nsec(nsec)
+    if signer in keys:
+        rank = keys.index(signer)
+        print(f"signing key  index {rank} of {len(keys) - 1}" + ("" if rank < index.MIRROR_TIERS else " (fill-in tier: mirror mode will not serve it)"))
+        return
+    message = f"the signing key {signer[:16]}… is not in MATELOTAGE_NPUBS; no client will serve this record"
+    if not force:
+        raise SystemExit(f"error: {message} (pass --force to publish anyway)")
+    print(f"warning: {message}")
+
+
 def _adopt(args) -> int:
+    if not args.local:
+        _require_trusted(_signing_key(), getattr(args, "force", False))
     try:
         out = preserve.adopt(
             args.repo, source=args.from_dir, revision=args.revision, license_id=args.license,
@@ -98,9 +119,9 @@ def _adopt(args) -> int:
     except (preserve.AdoptError, ValueError, TypeError) as exc:
         raise SystemExit(f"error: {exc}") from exc
     for path in out.get("skipped") or []:
-        print(f"lexcluded {path}")
+        print(f"excluded  {path}")
     if args.local:
-        for kind, path in preserve.write_staging(out, args.out or ".").items():
+        for kind, path in preserve.write_staging(out, args.out or ".", force=args.force).items():
             print(f"{kind:9} {path}")
         print("not published (--local)")
         return 0
@@ -111,6 +132,7 @@ def _adopt(args) -> int:
 
 
 def _publish(args) -> int:
+    _require_trusted(_signing_key(), getattr(args, "force", False))
     if not args.files:
         raise SystemExit(
             "error: --files is required: piece hashes are not file SHA-256s, so a .torrent alone "
@@ -131,7 +153,7 @@ def _publish(args) -> int:
         files = schema.normalise_files(manifest.get("files", manifest))
     except schema.SchemaError as exc:
         raise SystemExit(f"error: {exc}") from exc
-    torrent = schema.strip_piece_layers(Path(args.torrent).read_bytes()) if args.torrent else None
+    torrent = schema.storage_blob(Path(args.torrent).read_bytes()) if args.torrent else None
     magnet = args.magnet or manifest.get("magnet")
     if not magnet:
         raise SystemExit("error: --magnet is required (or a manifest that carries one)")
@@ -150,7 +172,10 @@ def _publish(args) -> int:
 
 
 def _verify(args) -> int:
-    result = preserve.verify(args.repo, args.dir)
+    try:
+        result = preserve.verify(args.repo, args.dir)
+    except preserve.AdoptError as exc:
+        raise SystemExit(f"error: {exc}") from exc
     print(json.dumps(result, indent=2))
     return 0 if not result["mismatched"] and not result["missing"] else 1
 
@@ -227,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--license", required=True, help="the licence you are asserting")
     adopt.add_argument("--local", action="store_true", help="write the files, do not publish")
     adopt.add_argument("--out", help="where --local writes (default: .)")
+    adopt.add_argument("--force", action="store_true", help="overwrite files in --out")
     adopt.add_argument("--pf-only", action="store_true", help="the repo exists only on Pirate Face")
     adopt.set_defaults(run=_adopt)
 
@@ -238,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     pub.add_argument("--revision")
     pub.add_argument("--license", required=True)
     pub.add_argument("--pf-only", action="store_true")
+    pub.add_argument("--force", action="store_true", help="publish even if the key is not trusted")
     pub.set_defaults(run=_publish)
 
     ver = sub.add_parser("verify", help="re-check a local copy against the signed manifest")

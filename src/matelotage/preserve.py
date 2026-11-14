@@ -57,6 +57,20 @@ def _materialise(repo_id: str, revision: str | None, source: str | None) -> tupl
     return tmp, model_dir, tmp
 
 
+def _escapes(path: Path, root: Path) -> bool:
+    """True when `path` resolves outside `root`.
+
+    `is_symlink()` is not sufficient on Windows: a directory junction reports **False** and
+    `os.walk` descends into it, so a folder containing one would hash files from somewhere else
+    entirely into a public record. Resolution catches links, junctions and reparse points alike.
+    """
+    try:
+        path.resolve().relative_to(root)
+    except (OSError, ValueError):
+        return True
+    return False
+
+
 def _collect(model_dir: Path) -> tuple[list[str], list[str], list[str]]:
     """(included, skipped by pirateface's own rules, links pointing outside the folder).
 
@@ -67,25 +81,30 @@ def _collect(model_dir: Path) -> tuple[list[str], list[str], list[str]]:
     """
     from pirateface.seed import package
 
-    root = Path(model_dir)
+    root = Path(model_dir).resolve()
     included: list[str] = []
     skipped: list[str] = []
     outside: list[str] = []
+
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         here = Path(dirpath)
-        dirnames[:] = sorted(name for name in dirnames if not (here / name).is_symlink())
+        keep: list[str] = []
+        for name in sorted(dirnames):
+            child = here / name
+            if _escapes(child, root):
+                outside.append(child.relative_to(root).as_posix() + "/")
+                continue
+            keep.append(name)
+        dirnames[:] = keep
         for name in sorted(filenames):
             path = here / name
             relative = path.relative_to(root).as_posix()
             if package.SKIP.search(relative):
                 skipped.append(relative)
                 continue
-            if path.is_symlink():
-                try:
-                    path.resolve().relative_to(root.resolve())
-                except ValueError:
-                    outside.append(relative)
-                    continue
+            if _escapes(path, root):
+                outside.append(relative)
+                continue
             included.append(relative)
     return included, skipped, outside
 
@@ -447,8 +466,12 @@ def _stem(repo_id: str) -> str:
     return stem
 
 
-def write_staging(outcome: dict[str, Any], out_dir: str | Path) -> dict[str, Path]:
-    """`--local`: write the torrent, the manifest and the signed event for inspection."""
+def write_staging(outcome: dict[str, Any], out_dir: str | Path, force: bool = False) -> dict[str, Path]:
+    """`--local`: write the torrent, the manifest and the signed event for inspection.
+
+    Refuses to clobber an existing file unless `force`. That `.torrent` may be someone's only copy of
+    the swarm it describes, and losing it to a typo is not a recoverable mistake.
+    """
     out = Path(out_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
     content = outcome["content"]
@@ -461,6 +484,13 @@ def write_staging(outcome: dict[str, Any], out_dir: str | Path) -> dict[str, Pat
     for path in written.values():
         if path.parent != out:  # belt and braces: _stem should already make this impossible
             raise AdoptError(f"refusing to write outside {out}: {path}")
+    if not force:
+        existing = [path.name for path in written.values() if path.exists()]
+        if existing:
+            raise AdoptError(
+                f"refusing to overwrite {', '.join(existing)} in {out}: pass --force if that is "
+                "what you mean"
+            )
     written["torrent"].write_bytes(outcome["torrent"])
     written["manifest"].write_text(
         json.dumps({"repo_id": content.repo_id, "magnet": content.magnet,

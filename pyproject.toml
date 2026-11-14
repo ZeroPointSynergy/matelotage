@@ -5,11 +5,28 @@ description = "What one keeps, the other keeps. A preservation layer for open mo
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.14"
+authors = [{ name = "Captain Keanu" }]
+keywords = ["bittorrent", "nostr", "preservation", "models", "p2p"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Archiving :: Mirroring",
+    "Topic :: Internet :: File Transfer Protocol (FTP)",
+]
 dependencies = [
     "pirateface>=0.2.3,<0.3",
+    # imported directly by schema.py / preserve.py; relying on a transitive pin is how a
+    # --no-deps install or a future upstream reshuffle breaks us
+    "libtorrent>=2.0",
+    "huggingface-hub>=0.24",
     "websockets>=13.0,<15.0",
     "coincurve>=20.0.0,<22.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ZeroPointSynergy/matelotage"
+Source = "https://github.com/ZeroPointSynergy/matelotage"
+Issues = "https://github.com/ZeroPointSynergy/matelotage/issues"
 
 [project.scripts]
 matelotage = "matelotage.cli:main"

@@ -8,6 +8,7 @@ indexer can fill gaps but can never correct or revive what a higher-precedence k
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -28,6 +29,7 @@ BREAKER_THRESHOLD = 2
 BREAKER_SECONDS = 60.0
 REVOCATION_LIMIT = 100
 DEFAULT_TIMEOUT = 1.5
+MAX_TIMEOUT = 30.0
 MODES = ("mirror", "keeper")
 DEFAULT_MODE = "mirror"
 
@@ -107,14 +109,29 @@ def get_trusted_pubkeys() -> list[str]:
 
 
 def get_timeout() -> float:
+    """Seconds per relay, clamped both ways: `inf` makes `future.result` overflow and silently
+    discards the whole fan-out, which would disable the fallback instead of slowing it."""
+    raw = os.environ.get("MATELOTAGE_TIMEOUT")
+    if raw is None or not raw.strip():
+        return DEFAULT_TIMEOUT
     try:
-        return max(0.2, float(os.environ.get("MATELOTAGE_TIMEOUT", DEFAULT_TIMEOUT)))
+        value = float(raw)
     except ValueError:
         return DEFAULT_TIMEOUT
+    if not math.isfinite(value):
+        return DEFAULT_TIMEOUT
+    return min(MAX_TIMEOUT, max(0.2, value))
+
+
+# The operator's own keys are the first two entries of the allowlist: a cold root (index 0) and the
+# daily publisher (index 1). Everything after that is a fill-in tier. This mirrors the custody layout
+# documented in the README and the RFC.
+MIRROR_TIERS = 2
 
 
 def get_mode() -> str:
-    """`mirror` (default) serves only what Pirate Face publishes; `keeper` serves any trusted record."""
+    """`mirror` (default) serves the operator's own records for repos Pirate Face still lists;
+    `keeper` serves any allowlisted author, whether or not the site lists the repo."""
     raw = (os.environ.get("MATELOTAGE_MODE") or DEFAULT_MODE).strip().lower()
     if raw not in MODES:
         log.warning("unknown MATELOTAGE_MODE %r, using %s", raw, DEFAULT_MODE)
@@ -125,14 +142,15 @@ def get_mode() -> str:
 def admissible(resolved: Resolved) -> bool:
     """Whether this record may be served under the current mode. One predicate, one place.
 
-    `mirror` requires both: the record is the operator's own (index 0), **and** Pirate Face has
-    not said no. Either alone would be wrong — index 0 alone would keep serving a repo the site
-    has since withdrawn, and "the site publishes the repo" alone would let any community key
-    redirect a published repo to a magnet the operator never signed.
+    `mirror` requires both: the record is one of the operator's own keys (the first `MIRROR_TIERS`
+    entries — cold root and publisher), **and** Pirate Face has not said no. Either alone would be
+    wrong — the tier alone would keep serving a repo the site has since withdrawn, and "the site
+    publishes the repo" alone would let any community key redirect a published repo to a magnet the
+    operator never signed.
     """
     if get_mode() == "keeper":
         return True
-    if resolved.author_index != 0:
+    if resolved.author_index >= MIRROR_TIERS:
         return False
     published = None
     if check_publication is not None:
@@ -146,7 +164,7 @@ def admissible(resolved: Resolved) -> bool:
 
 
 def clear_cache() -> None:
-    """Reset every per-process cache. Tests and `mlt --refresh` use this."""
+    """Reset every per-process cache. Used by the tests and after a configuration change."""
     global _revoked, _failures, _open_until
     with _lock:
         _hits.clear()

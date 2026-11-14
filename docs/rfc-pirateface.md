@@ -1,7 +1,7 @@
 # RFC: a signed, off-site index for `pirateface_hub`
 
 **Status:** draft, not posted anywhere. Written for the maintainer to read before any pull request exists.
-**Author:** Jon (ZeroPointSynergy), with the implementation in `matelotage` 0.1.0-dev.
+**Author:** Captain Keanu (ZeroPointSynergy). Implementation: `matelotage` 0.1.0.
 **Basis:** `pirateface_hub` 0.2.3, Windows, Python 3.12/3.13, CPU-only.
 
 ---
@@ -108,7 +108,8 @@ Field notes that matter:
   models you haven't published; it can never overwrite your record or revive what you revoked.
 - **Everything is verified locally before use:** NIP-01 event id recomputed from canonical JSON,
   BIP-340 Schnorr signature checked with `coincurve`, `kind` asserted, `d` tag matched to the repo,
-  author matched to the allowlist, `created_at` within ±900 s of now, and the torrent's v1 infohash
+  author matched to the allowlist, `created_at` no more than 900 s in the future (old records are
+  fine — being able to read a 2023 record is the point), and the torrent's v1 infohash
   matched to the magnet's `btih`.
 - **Two modes, one switch.** `mirror` (default) serves only records signed by the operator key.
   `keeper` serves any allowlisted author. Mirror exists so an integrator can be conservative without a
@@ -141,8 +142,11 @@ Two properties I would ask you to check, because they are the parts that could b
 2. **`pf_only()` never hijacks a healthy site.** It returns `None` unless the site itself failed, so
    the 30-second swarm-then-HTTPS fallback keeps working exactly as it does now.
 
-Each relay gets **1.5 s** and they are queried concurrently, so a dead relay costs the download at
-most 1.5 s before the Hugging Face path takes over.
+Each relay gets **1.5 s** and they are queried concurrently. A resolution runs two such queries —
+revocation records first, then the model record — so a set of silent relays costs about **3 s**
+before the Hugging Face path takes over; after two consecutive total misses the breaker stays open for
+60 s and later lookups return instantly. That is the honest cost of asking a network that may not be
+there.
 
 Import cost when installed but unused: **~6 ms** (`meta_path` finder; nothing imported). An eager
 `import pirateface.client.api` measured **+143 ms**, which is why it is lazy. `MATELOTAGE_DISABLE=1`
@@ -204,9 +208,9 @@ worth naming:
    swarm and — being replaceable — overwrite a good record. Now only an explicit `NOT_LISTED`
    permits a new swarm, and never in `mirror` mode.
 
-113 tests, ruff clean. Nothing has been committed or pushed. The only writes to a public relay were
-three records from a throwaway key during read-path testing (each replacing the last, as the format
-intends), all deleted afterwards and confirmed gone by querying the relay.
+113 tests, ruff clean, and the published wheel installs into a clean virtualenv with the `.pth`
+finders live. The only writes to a public relay have been test records from a throwaway key, all
+deleted afterwards and confirmed gone by querying the relay.
 
 ---
 
