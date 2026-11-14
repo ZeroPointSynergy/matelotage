@@ -47,7 +47,7 @@ packages = ["src/matelotage"]
 dev = ["ruff>=0.6", "pytest>=8"]
 
 [tool.ruff]
-extend-exclude = ["adversary"]
+extend-exclude = ["adversary", "scratch"]
 line-length = 120
 
 [tool.ruff.lint]

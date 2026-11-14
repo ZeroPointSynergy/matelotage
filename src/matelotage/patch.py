@@ -10,6 +10,7 @@ Order matters twice over:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 from typing import Any
@@ -176,6 +177,12 @@ def install(module=None) -> bool:
         module.pf_only = pf_only
         index.set_publication_check(_publication_check)
         _installed = True
+        # A fourth, narrower surface: answer when Hugging Face itself is unreachable. See offline.py
+        # for why this cannot be done from inside pf_only().
+        with contextlib.suppress(Exception):
+            from matelotage import offline
+
+            offline.install()
         log.debug("patched pirateface.client.api: lookup_magnet, torrent_file, pf_only")
         return True
 
@@ -192,6 +199,10 @@ def uninstall() -> bool:
     _installed = False
     index.set_publication_check(None)
     reset_caches()
+    with contextlib.suppress(Exception):
+        from matelotage import offline
+
+        offline.disable()
     return True
 
 

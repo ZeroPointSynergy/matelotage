@@ -107,15 +107,34 @@ Two consequences of "position is authority", stated plainly because they surpris
   deliberately left alone so `pf submit` and `pf seed` behave exactly as before.
 - **It does not speak while the site is answering.** If `pirateface.co` replies, its answer stands,
   including the licence gate. The fallback only speaks into silence.
-- **It cannot help when Hugging Face itself is unreachable, for repos outside `pirateface/*`.** The
-  upstream transport answers from a synthetic source only for that namespace; for every other
-  author it has to see Hugging Face's 401/404 first. With huggingface.co genuinely down, that call
-  raises before our record is ever consulted. A Pirate-Face-only model is served from a record with
-  the site down (verified end-to-end), but a box with no Hugging Face access at all is still stuck —
-  upstream design, not something three patched attributes can change.
+- **When Hugging Face is unreachable, it answers anyway.** Upstream consults the index only after
+  Hugging Face answers 401/404, so an HF outage would otherwise raise before any record is read. A
+  fourth, deliberately narrow patch sits outside that transport: if the network call *fails*, it tries
+  the index before re-raising. It can only ever answer `hf: false` records — `pf_only()` returns
+  `None` for everything Hugging Face can serve — so an ordinary model is never answered from a record
+  by mistake. Proven end-to-end with both services pointed at a closed port (see below). Set
+  `MATELOTAGE_OFFLINE_FIRST=0` to switch it off.
 - **It refuses hardlinked files by default.** A hardlink resolves to itself, so the containment check
   cannot see where it came from, and it is the one link a normal Windows user can make without admin
   rights. `MATELOTAGE_ALLOW_HARDLINKS=1` accepts them when you really do keep the bytes that way.
+
+## Where the records live
+
+Nobody hosts records for you. `mlt adopt` publishes them to relays; a relay is a server that accepts
+kind-30078 events and serves them to anyone who asks. Three consequences:
+
+- **Someone must publish the first copy**, and that is the operator: the key in `MATELOTAGE_NPUBS`
+  signs, and the record only exists once a relay accepts it. Nothing is stored in this package.
+- **Relay policies differ.** Measured 2026-11-14, of twelve public relays tried: **two** accepted a
+  kind-30078 write and served it back (`relay.primal.net`, `relay.snort.social`); damus was down, nos.lol
+  accepted the socket and never answered, three wanted payment, one refused the kind outright, and the
+  rest were unreachable or timed out. Deletion of a test record was honoured (`events_after=0`).
+- **Two relays is thin.** For anything you mean to preserve, run your own relay (strfry or
+  nostr-rs-relay will store these events) or add several you trust with `MATELOTAGE_RELAYS`. A record
+  is only as durable as the number of independent servers holding it.
+
+A resolution queries the list concurrently and takes the newest verified answer, so adding relays
+costs no latency; dead ones cost only the timeout.
 
 ## Constants worth knowing
 
@@ -129,6 +148,17 @@ Two consequences of "position is authority", stated plainly because they surpris
   hashes; we recompute, we do not copy.)
 
 ## Measured, not asserted
+
+With **both** services unreachable — `PF_API` and `HF_ENDPOINT` pointed at a closed port — the real
+client still resolved from a signed record and pulled the bytes from the swarm:
+
+```
+🏴‍☠️ pirateface  acme/offline-model is on Pirate Face (2 files, 0.2 MB), downloading from the swarm
+SNAPSHOT OK
+  config.json        exists=True sha256_matches=True
+  model.safetensors  exists=True sha256_matches=True
+```
+
 
 On 2026-11-14, with the site's API pointed at a closed port and no web seed anywhere:
 

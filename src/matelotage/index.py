@@ -19,11 +19,13 @@ from . import relay, schema
 
 log = logging.getLogger("matelotage.index")
 
+# Measured 2026-11-14: of twelve public relays tried, exactly two accepted a kind-30078 write and
+# served it back — these. damus and nos.lol were in the old default list and neither answers from this
+# host (521 and silence respectively), so a default that only looks redundant is worse than an honest
+# pair. Add your own with MATELOTAGE_RELAYS; two relays is thin for preservation.
 DEFAULT_RELAYS: tuple[str, ...] = (
     "wss://relay.primal.net",
     "wss://relay.snort.social",
-    "wss://relay.damus.io",
-    "wss://nos.lol",
 )
 BREAKER_THRESHOLD = 2
 BREAKER_SECONDS = 60.0

@@ -231,7 +231,24 @@ deleted afterwards and confirmed gone by querying the relay.
 4. **`hf`, `torrent_b64`, and `pf_only`** are the three places where our reading of your contract
    could be wrong. If any of them misrepresents what your client expects, that is the part I most
    want corrected before this goes anywhere.
-5. **#30's reverse-hash endpoint.** If a batch hash lookup ever exists server-side, the record format
+5. **Would you move one `if` in `transport.py`?** Right now the index is consulted proactively only
+   for the `pirateface/*` namespace, and reactively only *after* Hugging Face answers 401/404. When
+   Hugging Face itself is unreachable that call raises and the record is never read — even though it
+   carries the magnet and the hashes. Since `pf_only()` returns `None` for any model Hugging Face can
+   serve, the namespace gate is redundant, and swapping the two blocks would make your client survive
+   an HF outage for keepers' records with no change in behaviour for anything else:
+
+   ```python
+   answered = self._answer(request, path)   # no namespace filter; None for ordinary models
+   if answered:
+       return answered
+   response = self.inner.handle_request(request)
+   ```
+
+   I have implemented the equivalent locally as a transport wrapper (it only acts when the network
+   call fails, and only ever answers `hf: false` records), so this is not a blocker — it is simply
+   better in your repo than in mine.
+6. **#30's reverse-hash endpoint.** If a batch hash lookup ever exists server-side, the record format
    above can carry it without a change; nothing here blocks that work.
 
 ---
