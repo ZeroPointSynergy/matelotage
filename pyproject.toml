@@ -1,0 +1,43 @@
+[project]
+name = "matelotage"
+version = "0.1.0"
+description = "What one keeps, the other keeps. A preservation layer for open models."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "pirateface>=0.2.3,<0.3",
+    "websockets>=13.0,<15.0",
+    "coincurve>=20.0.0,<22.0.0",
+]
+
+[project.scripts]
+matelotage = "matelotage.cli:main"
+mlt = "matelotage.cli:main"
+mtlg = "matelotage.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/matelotage"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/matelotage.pth" = "matelotage.pth"
+
+[dependency-groups]
+dev = ["ruff>=0.6", "pytest>=8"]
+
+[tool.ruff]
+extend-exclude = ["adversary"]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["B", "I", "UP", "SIM", "PTH", "RUF"]
+# Broad excepts are deliberate: a broken relay or record must never take down a download.
+ignore = ["BLE001", "S101"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

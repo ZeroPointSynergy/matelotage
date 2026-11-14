@@ -1,0 +1,56 @@
+{
+  "generated": "2026-11-14",
+  "host": "Windows 10, MSYS bash, py3.13.0 venv, websockets 14.2, coincurve 21.0.0, libtorrent 2.1.1",
+  "method": "one signed kind-30078 event per size per relay, throwaway key, kind-5 cleanup where the key was still held",
+  "startup": {
+    "measured_on": "pirateface 0.2.3 / f57e951 (earlier run on the 0.2.0 tree: 45.3 ms baseline, +173.0 ms eager)",
+    "baseline_python_c_pass_ms": 54.2,
+    "eager_import_pirateface_client_api_delta_ms": 143.2,
+    "eager_verdict": "FAIL (budget 100 ms) — importlib.metadata alone is ~56 ms and api.py imports it for VERSION",
+    "lazy_patch_on_import_delta_ms": 6.2,
+    "lazy_note": "finder cost is independent of the pirateface version: api is never imported at startup",
+    "lazy_verdict": "PASS — matelotage.pth installs a meta_path finder; pirateface.client.api is patched when first imported",
+    "patch_fires": true,
+    "conclusion": "the boot hook MUST be patch-on-import (like pirateface._boot), never an eager import"
+  },
+  "default_relays": {
+    "wss://relay.damus.io": {
+      "nip11": "HTTP 521 on 14/14 attempts",
+      "accepts": null,
+      "verdict": "unreachable from this host during the probe (origin down behind Cloudflare)"
+    },
+    "wss://nos.lol": {
+      "nip11": {"max_limit": 500, "max_message_length": 131072, "max_subscriptions": 200},
+      "accepts": null,
+      "observed": "websocket opens, EVENT sent, no OK / NOTICE / CLOSED within 12 s — at 24/32/48/64 KB, at 425 B, and for a plain kind-1 event too",
+      "verdict": "not a size limit: silent non-acknowledgement (write policy or required auth). Unusable for publishing right now."
+    },
+    "wss://relay.primal.net": {
+      "nip11": {"max_limit": 500, "max_message_length": 1000000, "max_subscriptions": 20},
+      "accepts": [24000, 32000, 48000, 64000, 64415, 96415, 127415, 200415],
+      "rejects": [],
+      "verdict": "writable and acknowledging; 200 415 B accepted, so its cap is above anything matelotage needs"
+    }
+  },
+  "candidates": {
+    "wss://relay.snort.social": {"nip11_max_message_length": 524288, "tiny": "OK", "30KB": "OK", "verdict": "writable"},
+    "wss://nostr.mom": {"nip11_max_message_length": 131072, "tiny": "silent", "30KB": "silent", "verdict": "silent, like nos.lol"},
+    "wss://relay.nostr.band": {"verdict": "connection timed out from this host"},
+    "wss://relay.nostr.bg": {"verdict": "DNS resolution failed"}
+  },
+  "recommended_defaults": [
+    "wss://relay.primal.net",
+    "wss://relay.snort.social",
+    "wss://relay.damus.io",
+    "wss://nos.lol"
+  ],
+  "defaults_rationale": "the two measured-writable relays first, then the two large public relays for query fan-out and because outages are usually temporary; publish must report per-relay success and refuse to claim success unless at least one relay acknowledged",
+  "max_event_bytes": 32000,
+  "max_event_bytes_evidence": "no relay rejected any size up to 200 415 B. 32 000 is a compatibility choice, not a measured ceiling: the target payload (v1-only torrent b64 ~27 KB + manifest ~2 KB + JSON) lands at ~30 KB, and 32 KB stays under the 64 KB and 128 KB frames most public relays advertise.",
+  "design_consequences": [
+    "silent relays make every cold resolve cost the full timeout because EOSE never arrives; drop the default relay timeout to 1.5 s and count silence as a breaker failure",
+    "publisher must never claim success at zero acks, and should warn when only one relay accepted",
+    "two of the three original defaults are unusable today; the default list above is measured, not inherited"
+  ],
+  "orphans": "primal probe events were deleted (kind 5). Two ~30 KB events remain on relay.snort.social because each probe run used a throwaway key that was not retained; they sit under a random pubkey nothing queries. The real `mlt probe` must hold its key for the session so cleanup is always possible."
+}

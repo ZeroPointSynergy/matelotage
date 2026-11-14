@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# local test artefacts, never shipped
+smoke*/
+hf_cold*/
+smoke_env.sh
+adversary/
