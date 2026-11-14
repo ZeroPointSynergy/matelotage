@@ -7,9 +7,9 @@ Pirate Face, and it holds no authority over their index — it reads their catal
 statements about it. Bugs in `pirateface_hub` belong in
 [their tracker](https://github.com/pirateface/pirateface_hub/issues), not here.
 
-A *matelotage* was a written partnership between two buccaneers: shared property, mutual
-inheritance, aid in old age. Historians read the relationship in different ways; the part that
-matters here is the contract — two keepers, each bound to preserve the other's share.
+A *matelotage* was a written agreement between two buccaneers: shared property, mutual
+inheritance, and mutual protection.The part that matters here is the contract — two keepers, 
+each bound to preserve the other's share.
 
 Matelotage is a preservation layer for open models. It keeps a signed, replicated index of
 `repo → magnet + sha256 manifest` on Nostr relays, and patches [Pirate Face](https://pirateface.co)
