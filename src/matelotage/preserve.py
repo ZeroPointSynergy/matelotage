@@ -57,6 +57,20 @@ def _materialise(repo_id: str, revision: str | None, source: str | None) -> tupl
     return tmp, model_dir, tmp
 
 
+def _hardlinked(path: Path) -> bool:
+    """A hardlink resolves to itself, so containment cannot see where it came from.
+
+    It is also the only link a plain Windows user can create without admin rights or Developer Mode,
+    which makes it the likeliest way an outside file ends up inside a folder someone adopts.
+    """
+    if (os.environ.get("MATELOTAGE_ALLOW_HARDLINKS") or "").strip() in ("1", "true", "yes"):
+        return False
+    try:
+        return path.is_file() and path.stat().st_nlink > 1
+    except OSError:
+        return False
+
+
 def _escapes(path: Path, root: Path) -> bool:
     """True when `path` resolves outside `root`.
 
@@ -104,6 +118,11 @@ def _collect(model_dir: Path) -> tuple[list[str], list[str], list[str]]:
                 continue
             if _escapes(path, root):
                 outside.append(relative)
+                continue
+            if _hardlinked(path):
+                outside.append(
+                    f"{relative} (hardlink: set MATELOTAGE_ALLOW_HARDLINKS=1 to accept it)"
+                )
                 continue
             included.append(relative)
     return included, skipped, outside
@@ -203,6 +222,11 @@ def _screen_paths(root: Path, wanted: dict[str, int]) -> None:
                 f"refusing to adopt: {relative} resolves outside the folder ({resolved}); "
                 "a junction or link is pointing at files this record must not publish"
             ) from None
+        if _hardlinked(resolved):
+            raise AdoptError(
+                f"refusing to adopt: {relative} is a hardlink, so it may be the same bytes as a file "
+                "outside this folder; set MATELOTAGE_ALLOW_HARDLINKS=1 if that is intended"
+            )
 
 
 def _piece_hex(value: Any) -> str:

@@ -133,8 +133,9 @@ def test_publish_strips_the_web_seed_from_the_stored_torrent(tmp_path, monkeypat
         return {"wss://relay.invalid": "ok"}
 
     monkeypatch.setattr(publish, "publish", fake_publish)
-    monkeypatch.setenv("MATELOTAGE_NSEC", schema.generate_keypair()[0])
-    monkeypatch.delenv("MATELOTAGE_NPUBS", raising=False)
+    nsec, npub, _hex = schema.generate_keypair()
+    monkeypatch.setenv("MATELOTAGE_NSEC", nsec)
+    monkeypatch.setenv("MATELOTAGE_NPUBS", npub)
 
     rc = cli.main([
         "publish", REPO, "--files", str(manifest_path), "--torrent", str(torrent_path),

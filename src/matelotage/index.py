@@ -54,6 +54,8 @@ class Resolved:
 
 
 _hits: dict[str, Resolved] = {}
+_hit_stamps: dict[str, float] = {}
+CACHE_TTL = 300.0
 _served: set[str] = set()  # provenance: only the magnet path marks a repo as served
 _revoked: set[str] | None = None
 _failures = 0
@@ -106,6 +108,20 @@ def get_trusted_pubkeys() -> list[str]:
         if key not in out:
             out.append(key)
     return out
+
+
+def get_cache_ttl() -> float:
+    """How long a resolved record may be served before it is re-checked against the relays."""
+    raw = os.environ.get("MATELOTAGE_CACHE_TTL")
+    if raw is None or not raw.strip():
+        return CACHE_TTL
+    try:
+        value = float(raw)
+    except ValueError:
+        return CACHE_TTL
+    if not math.isfinite(value):
+        return CACHE_TTL
+    return min(3600.0, max(0.0, value))
 
 
 def get_timeout() -> float:
@@ -276,6 +292,9 @@ def _resolve(repo_id: str, keys: list[str], relays: list[str]) -> Resolved | Non
 
     if not candidates:
         return None
+    # Position is authority, exactly as documented: index 0 outranks index 1 outranks the fill-in
+    # tier. That means a repo the cold root signed can only be withdrawn by the cold root — which is
+    # the point of a cold root, and is why it publishes nothing but revocations.
     return min(candidates, key=lambda r: (r.author_index, -r.event.created_at, r.event.id))
 
 
@@ -283,15 +302,27 @@ def get(repo_id: str) -> Resolved | None:
     """The winning record for repo_id, or None. Never raises."""
     try:
         with _lock:
-            resolved = _hits.get(repo_id)
+            hit = _hits.get(repo_id)
+            stamp = _hit_stamps.get(repo_id, 0.0)
+        resolved = None
+        if hit is not None:
+            if time.monotonic() - stamp <= get_cache_ttl():
+                resolved = hit
+            else:
+                log.debug("%s: cached record is stale, re-resolving", repo_id)
         if resolved is None:
             keys, relays = get_trusted_pubkeys(), get_relays()
             if not keys or not relays or breaker_open():
                 return None
-            resolved = _resolve(repo_id, keys, relays)
-            if resolved is not None:
+            fresh = _resolve(repo_id, keys, relays)
+            if fresh is not None:
+                resolved = fresh
                 with _lock:
-                    _hits[repo_id] = resolved
+                    _hits[repo_id] = fresh
+                    _hit_stamps[repo_id] = time.monotonic()
+            elif hit is not None:
+                # a failed refresh keeps serving what we had: an unreachable relay is not a withdrawal
+                resolved = hit
         if resolved is None or not admissible(resolved):
             return None
         return resolved

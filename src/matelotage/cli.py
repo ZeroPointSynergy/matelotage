@@ -96,7 +96,13 @@ def _require_trusted(nsec: str, force: bool) -> None:
     except Exception:  # configuration problems are reported by `mlt doctor`
         return
     if not keys:
-        return
+        if force:
+            print("warning: no MATELOTAGE_NPUBS configured; publishing a record no client will serve")
+            return
+        raise SystemExit(
+            "error: no MATELOTAGE_NPUBS configured; no client would serve this record "
+            "(pass --force to publish anyway)"
+        )
     signer = schema.pubkey_from_nsec(nsec)
     if signer in keys:
         rank = keys.index(signer)
@@ -121,7 +127,11 @@ def _adopt(args) -> int:
     for path in out.get("skipped") or []:
         print(f"excluded  {path}")
     if args.local:
-        for kind, path in preserve.write_staging(out, args.out or ".", force=args.force).items():
+        try:
+            written = preserve.write_staging(out, args.out or ".", force=args.overwrite)
+        except preserve.AdoptError as exc:
+            raise SystemExit(f"error: {exc}") from exc
+        for kind, path in written.items():
             print(f"{kind:9} {path}")
         print("not published (--local)")
         return 0
@@ -132,7 +142,6 @@ def _adopt(args) -> int:
 
 
 def _publish(args) -> int:
-    _require_trusted(_signing_key(), getattr(args, "force", False))
     if not args.files:
         raise SystemExit(
             "error: --files is required: piece hashes are not file SHA-256s, so a .torrent alone "
@@ -157,6 +166,7 @@ def _publish(args) -> int:
     magnet = args.magnet or manifest.get("magnet")
     if not magnet:
         raise SystemExit("error: --magnet is required (or a manifest that carries one)")
+    _require_trusted(_signing_key(), getattr(args, "force", False))
     content = publish.build_content(
         args.repo, magnet=magnet, files=files, license_id=args.license, hf=not args.pf_only,
         torrent_bytes=torrent, revision=args.revision,
@@ -252,7 +262,11 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--license", required=True, help="the licence you are asserting")
     adopt.add_argument("--local", action="store_true", help="write the files, do not publish")
     adopt.add_argument("--out", help="where --local writes (default: .)")
-    adopt.add_argument("--force", action="store_true", help="overwrite files in --out")
+    adopt.add_argument("--overwrite", action="store_true", help="overwrite files already in --out")
+    adopt.add_argument(
+        "--force", action="store_true",
+        help="publish even if the signing key is not in MATELOTAGE_NPUBS",
+    )
     adopt.add_argument("--pf-only", action="store_true", help="the repo exists only on Pirate Face")
     adopt.set_defaults(run=_adopt)
 

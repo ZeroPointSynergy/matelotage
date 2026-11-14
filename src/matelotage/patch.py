@@ -11,6 +11,7 @@ Order matters twice over:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from . import index
@@ -19,6 +20,8 @@ log = logging.getLogger("matelotage.patch")
 
 _orig: dict[str, Any] = {}
 _installed = False
+_installing = False
+_install_lock = threading.RLock()
 _torrent_hits: dict[tuple[str, str | None], tuple[bytes, bool]] = {}
 _pf_hits: dict[str, tuple[dict[str, Any], bool]] = {}
 
@@ -139,20 +142,42 @@ def _publication_check(repo_id: str):
 
 
 def install(module=None) -> bool:
-    """Swap the three attributes. Idempotent; never raises (the boot hook depends on that)."""
-    global _installed
+    """Swap the three attributes. Idempotent; never raises (the boot hook depends on that).
+
+    Re-entrancy is the trap here: `module=None` imports pirateface.client.api, and that import is
+    itself intercepted by the boot finder, which calls install(module) from inside this call. Without
+    a guard the outer call resumes after the inner one has already patched the module, captures the
+    *patched* functions as the "originals", and every later call recurses until the stack dies.
+
+    So: a guard flag while importing, and a hard refusal to ever record our own functions.
+    """
+    global _installed, _installing
     if _installed:
         return True
-    if module is None:
-        import pirateface.client.api as module
-    _orig.update(_originals(module))
-    module.lookup_magnet = lookup_magnet
-    module.torrent_file = torrent_file
-    module.pf_only = pf_only
-    index.set_publication_check(_publication_check)
-    _installed = True
-    log.debug("patched pirateface.client.api: lookup_magnet, torrent_file, pf_only")
-    return True
+    with _install_lock:
+        if _installed:
+            return True
+        if _installing:
+            return False  # the import hook is mid-flight and will finish the install itself
+        if module is None:
+            _installing = True
+            try:
+                import pirateface.client.api as module
+            finally:
+                _installing = False
+            if _installed:
+                return True
+            if module.lookup_magnet is lookup_magnet:
+                _installed = True
+                return True
+        _orig.update(_originals(module))
+        module.lookup_magnet = lookup_magnet
+        module.torrent_file = torrent_file
+        module.pf_only = pf_only
+        index.set_publication_check(_publication_check)
+        _installed = True
+        log.debug("patched pirateface.client.api: lookup_magnet, torrent_file, pf_only")
+        return True
 
 
 def uninstall() -> bool:

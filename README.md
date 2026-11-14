@@ -80,6 +80,15 @@ A repo tombstone (`mlt revoke`) withdraws a model, and a lower-precedence key ca
 revocation record lets the cold root kill a stolen publisher key across every client without a
 release.
 
+Two consequences of "position is authority", stated plainly because they surprise people:
+
+- **A repo the cold root signed can only be withdrawn by the cold root.** The publisher's tombstone
+  loses to a live record at index 0. That is the price of the cold root being able to override a
+  compromised publisher, and it is why index 0 is kept offline and used rarely.
+- **A withdrawal reaches a running downloader within `MATELOTAGE_CACHE_TTL`** (default 300 s), not
+  instantly and not only at restart. Records are re-checked on that interval; a failed refresh keeps
+  serving the old record, because an unreachable relay is not a withdrawal.
+
 ## What it does not do
 
 - **It does not decide what may be shared.** There is no licence allowlist in the code. A record
@@ -98,6 +107,15 @@ release.
   deliberately left alone so `pf submit` and `pf seed` behave exactly as before.
 - **It does not speak while the site is answering.** If `pirateface.co` replies, its answer stands,
   including the licence gate. The fallback only speaks into silence.
+- **It cannot help when Hugging Face itself is unreachable, for repos outside `pirateface/*`.** The
+  upstream transport answers from a synthetic source only for that namespace; for every other
+  author it has to see Hugging Face's 401/404 first. With huggingface.co genuinely down, that call
+  raises before our record is ever consulted. A Pirate-Face-only model is served from a record with
+  the site down (verified end-to-end), but a box with no Hugging Face access at all is still stuck —
+  upstream design, not something three patched attributes can change.
+- **It refuses hardlinked files by default.** A hardlink resolves to itself, so the containment check
+  cannot see where it came from, and it is the one link a normal Windows user can make without admin
+  rights. `MATELOTAGE_ALLOW_HARDLINKS=1` accepts them when you really do keep the bytes that way.
 
 ## Constants worth knowing
 

@@ -106,12 +106,16 @@ Field notes that matter:
   `(author_index, -created_at, event_id)`: within a key the newest wins (NIP-78 replacement), across
   keys an earlier key outranks a later one **including tombstones**. A community key can fill in
   models you haven't published; it can never overwrite your record or revive what you revoked.
+- **A withdrawal is seen within one cache interval** (`MATELOTAGE_CACHE_TTL`, 300 s by default), not
+  only at process start: records are re-resolved on that interval, and a failed refresh keeps serving
+  the previous record rather than treating an unreachable relay as a revocation.
 - **Everything is verified locally before use:** NIP-01 event id recomputed from canonical JSON,
   BIP-340 Schnorr signature checked with `coincurve`, `kind` asserted, `d` tag matched to the repo,
   author matched to the allowlist, `created_at` no more than 900 s in the future (old records are
   fine — being able to read a 2023 record is the point), and the torrent's v1 infohash
   matched to the magnet's `btih`.
-- **Two modes, one switch.** `mirror` (default) serves only records signed by the operator key.
+- **Two modes, one switch.** `mirror` (default) serves only records signed by the operator's own keys
+  — the first two allowlist entries, cold root and publisher.
   `keeper` serves any allowlisted author. Mirror exists so an integrator can be conservative without a
   code change.
 - **Withdrawal is honoured, permanently.** A `revoked: true` record suppresses the repo for every

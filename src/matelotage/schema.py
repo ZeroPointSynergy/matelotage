@@ -305,6 +305,22 @@ def _safe_path(path: Any) -> str:
     return path
 
 
+def torrent_file_paths(blob: bytes) -> set[str]:
+    """The paths a .torrent lists, relative to the folder (pad files included)."""
+    raw = _bdecode(blob)
+    info = raw.get(b"info") if isinstance(raw, dict) else None
+    if not isinstance(info, dict):
+        raise SchemaError("torrent: no info dict")
+    if isinstance(info.get(b"files"), list):
+        return {
+            "/".join(part.decode("utf-8", "surrogateescape") for part in entry.get(b"path", []))
+            for entry in info[b"files"]
+        }
+    if isinstance(info.get(b"name"), bytes):
+        return {info[b"name"].decode("utf-8", "surrogateescape")}
+    raise SchemaError("torrent: lists no files")
+
+
 def safe_relative_path(path: Any) -> str:
     """Public form of the path predicate: a record may only name files inside its own folder."""
     return _safe_path(path)
@@ -420,6 +436,16 @@ def validate_model_content(
         got = str(info.info_hashes().v1)
         if got != btih:
             raise SchemaError(f"content: torrent infohash {got} does not match magnet {btih}")
+        # The manifest and the torrent are signed together, so they must describe the same files.
+        # Sizes cannot be cross-checked (the manifest carries digests, not sizes) but presence can,
+        # and a manifest naming files the swarm will never carry is a record that cannot be served.
+        carried = torrent_file_paths(torrent_bytes)
+        unknown = sorted(set(files) - carried)
+        if unknown:
+            raise SchemaError(
+                f"content: the torrent does not contain {unknown[:3]} — a manifest may only describe "
+                "files its own torrent carries"
+            )
     elif not hf:
         raise SchemaError("content: hf is false, so torrent_b64 is required (pf_only needs file sizes)")
 

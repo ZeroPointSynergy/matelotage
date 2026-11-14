@@ -144,9 +144,10 @@ def test_publish_refuses_a_torrent_without_a_manifest(capsys):
 
 def test_publish_with_a_manifest_reaches_the_relay(tmp_path, monkeypatch):
     relay = MockRelay().start()
-    nsec, _npub, pubkey = schema.generate_keypair()
+    nsec, npub, pubkey = schema.generate_keypair()
     monkeypatch.setenv("MATELOTAGE_RELAYS", relay.url)
     monkeypatch.setenv("MATELOTAGE_NSEC", nsec)
+    monkeypatch.setenv("MATELOTAGE_NPUBS", npub)  # a record nobody trusts is not a publication
 
     manifest = tmp_path / "m.json"
     manifest.write_text(json.dumps({
@@ -171,9 +172,10 @@ MAGNET = "magnet:?xt=urn:btih:" + "a" * 40
 def test_a_list_form_manifest_signs_the_real_paths(tmp_path, monkeypatch):
     """`{files: [{path, sha256}]}` must not collapse to the literal keys 'path' and 'sha256'."""
     relay = MockRelay().start()
-    nsec, _npub, pubkey = schema.generate_keypair()
+    nsec, npub, pubkey = schema.generate_keypair()
     monkeypatch.setenv("MATELOTAGE_RELAYS", relay.url)
     monkeypatch.setenv("MATELOTAGE_NSEC", nsec)
+    monkeypatch.setenv("MATELOTAGE_NPUBS", npub)  # a record nobody trusts is not a publication
     manifest = tmp_path / "m.json"
     manifest.write_text(json.dumps({
         "magnet": MAGNET,
