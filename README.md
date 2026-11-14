@@ -137,9 +137,9 @@ the info dict, so the infohash is untouched and the record still joins the same 
 - [docs/rfc-pirateface.md](docs/rfc-pirateface.md) — a written ask, kept as a document rather than a
   feature request: what it would take for the maintainers to own this, if they ever want to.
 
-The project is standalone on purpose. It does not need Pirate Face's permission, blessing, or a
-server change, and if they ever absorb it the integration is small enough that this repository can be
-retired without stranding anyone.
+The project is standalone by design: it adds a layer beside Pirate Face rather than inside it, and it
+asks nothing of the maintainers. If they ever want to own the idea, the integration is small enough
+that this repository can be retired without stranding anyone.
 
 ## Status
 
