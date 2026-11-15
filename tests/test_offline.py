@@ -112,3 +112,78 @@ def test_a_failing_fallback_surfaces_the_network_error(monkeypatch, hf_host):
 
 def test_reports_whether_it_is_installed():
     assert isinstance(offline.is_installed(), bool)
+
+
+# --- round 6: wrong answers, not missing ones ------------------------------------
+
+
+class _Real:
+    def handle_request(self, request):
+        return "real"
+
+    def close(self):
+        pass
+
+
+def _fake_http_module():
+    from types import SimpleNamespace
+
+    module = SimpleNamespace(_GLOBAL_CLIENT_FACTORY=lambda: SimpleNamespace(_transport=_Real()))
+    module.set_client_factory = lambda f: setattr(module, "_GLOBAL_CLIENT_FACTORY", f)
+    return module
+
+
+def test_repeated_wrapping_does_not_stack_layers():
+    """pirateface installs a fresh, unmarked factory on every hook run; a marker on it is useless."""
+    module = _fake_http_module()
+    for _ in range(10):
+        offline._wrap_factory(module)
+
+    depth, transport = 0, module._GLOBAL_CLIENT_FACTORY()._transport
+    while isinstance(transport, offline.OfflineFirst):
+        depth += 1
+        transport = transport.inner
+    assert depth == 1, f"wrappers stacked: {depth} layers"
+
+
+def test_install_re_enables_after_a_disable(monkeypatch):
+    monkeypatch.delenv("MATELOTAGE_OFFLINE_FIRST", raising=False)
+    offline.install()
+    offline.disable()
+    assert offline.install() is True, "a reinstall has to undo an earlier disable"
+    assert offline._disabled is False
+
+
+def test_a_programming_error_is_not_disguised_as_an_answer(monkeypatch, hf_host):
+    """Only the network being gone justifies synthesising a response."""
+    class Buggy:
+        def handle_request(self, request):
+            raise KeyError("a bug in a parser")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("pirateface.client.api.pf_only", lambda repo_id: FOUND)
+    with pytest.raises(KeyError):
+        offline.OfflineFirst(Buggy()).handle_request(hf_host("/api/models/acme/offline-model"))
+
+
+def test_a_non_recursive_tree_lists_only_direct_children(monkeypatch):
+    import httpx2
+
+    nested = {
+        "repo_id": "acme/offline-model",
+        "commit": "main",
+        "files": {
+            "config.json": (10, "c" * 64, None),
+            "sub/a.bin": (20, "d" * 64, None),
+            "sub/deep/b.bin": (30, "e" * 64, None),
+        },
+    }
+    monkeypatch.setattr("pirateface.client.api.pf_only", lambda repo_id: nested)
+    url = httpx2.URL("https://huggingface.co/api/models/acme/offline-model/tree/main?recursive=false")
+    request = SimpleNamespace(url=url, method="GET")
+
+    response = offline.OfflineFirst(Boom()).handle_request(request)
+    paths = [entry["path"] for entry in response.json()]
+    assert paths == ["config.json"], paths

@@ -112,7 +112,9 @@ Two consequences of "position is authority", stated plainly because they surpris
   fourth, deliberately narrow patch sits outside that transport: if the network call *fails*, it tries
   the index before re-raising. It can only ever answer `hf: false` records — `pf_only()` returns
   `None` for everything Hugging Face can serve — so an ordinary model is never answered from a record
-  by mistake. Proven end-to-end with both services pointed at a closed port (see below). Set
+  by mistake. It wraps the synchronous client only — huggingface_hub's async factory is left alone —
+  and it only treats genuine network failures as "the hub is gone"; anything else propagates unchanged.
+  Proven end-to-end with both services pointed at a closed port (see below). Set
   `MATELOTAGE_OFFLINE_FIRST=0` to switch it off.
 - **It refuses hardlinked files by default.** A hardlink resolves to itself, so the containment check
   cannot see where it came from, and it is the one link a normal Windows user can make without admin
