@@ -181,3 +181,15 @@ def test_pact_describes_the_order(pact):
     assert [e["index"] for e in info["allowlist"]] == [0, 1, 2]
     assert info["allowlist"][0]["role"] == "cold root"
     assert keys[0][1] in pact_module.format_text(info)
+
+
+def test_clear_cache_resets_every_cache_it_owns(pact):
+    """`clear_cache` is what tests and `mlt` call to start clean; a map it forgets is a slow leak."""
+    keys, relay = pact
+    relay.events.append(record(keys[0][0], REPO, MAGNET_A))
+    assert index.get(REPO) is not None
+    assert REPO in index._hit_stamps
+
+    index.clear_cache()
+    assert index._hits == {}
+    assert index._hit_stamps == {}, "stale timestamps would accumulate for the life of the process"

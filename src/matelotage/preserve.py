@@ -199,7 +199,7 @@ def build_record(
     return _record_from_scratch(repo_id, model_dir, license_id=license_id, hf=hf, revision=revision)
 
 
-MAX_NOT_IN_SWARM = 64
+MAX_NOT_IN_SWARM = schema.MAX_NOT_IN_SWARM  # one source of truth for the cap
 _PAD_RE = re.compile(r"^\.pad(/|$)")
 
 

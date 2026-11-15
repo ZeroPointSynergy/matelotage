@@ -186,6 +186,7 @@ def clear_cache() -> None:
     global _revoked, _failures, _open_until
     with _lock:
         _hits.clear()
+        _hit_stamps.clear()
         _served.clear()
         _revoked = None
         _failures = 0
