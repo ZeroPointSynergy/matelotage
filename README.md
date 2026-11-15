@@ -1,5 +1,27 @@
 # matelotage
 
+> **Archived 2026-11-15 — superseded.**
+>
+> This solved a problem that Pirate Face is now solving in the client itself:
+> [pirateface_hub#9](https://github.com/pirateface/pirateface_hub/issues/9) publishes a signed DHT
+> pointer at a weekly magnet index, so `pf` can find a model's torrent with the site down. That is
+> the better answer — it ships in the client, costs ~8 MB a week instead of ~120 MB of replicated
+> records, needs no monkeypatch, and uses a carrier that does not depend on relays agreeing to store
+> a record (measured: 2 of 12 public relays accept these).
+>
+> **Nothing here should be installed.** The repository is kept read-only as a record of what was
+> measured. Three things in it are still worth reading:
+>
+> - **The fingerprint question.** #9 asks which fingerprint to expect when Hugging Face is
+>   unreachable. Answer: verify the local bytes against the torrent's **own piece hashes** — walk
+>   the piece stream in torrent order, pad files as zeroes, SHA-1 per piece against `info["pieces"]`.
+>   That is the check the swarm itself performs, so it needs no server. See `preserve._verify_pieces`.
+> - **A blocker in the same scenario.** Upstream calls `pf_only()` only *after* Hugging Face answers
+>   401/404, so with Hugging Face down that call raises and the fallback is never consulted, however
+>   good the index is. See `src/matelotage/offline.py` and RFC question 5.
+> - **Six adversarial review rounds**, in the commit messages: the defects found, how each was
+>   proven, and the ones accepted rather than fixed.
+
 > **What one keeps, the other keeps.**
 
 **Unofficial.** This is a separate project. It is not affiliated with, endorsed by, or maintained by
