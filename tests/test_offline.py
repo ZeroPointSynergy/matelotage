@@ -98,3 +98,17 @@ def test_switched_off_by_environment(monkeypatch):
     assert offline.enabled() is False
     monkeypatch.delenv("MATELOTAGE_OFFLINE_FIRST")
     assert offline.enabled() is True
+
+
+def test_a_failing_fallback_surfaces_the_network_error(monkeypatch, hf_host):
+    """If our own lookup blows up, the caller must still see the connection error it handles."""
+    def explode(repo_id):
+        raise RuntimeError("record is corrupt")
+
+    monkeypatch.setattr("pirateface.client.api.pf_only", explode)
+    with pytest.raises(ConnectionError):
+        offline.OfflineFirst(Boom()).handle_request(hf_host("/api/models/acme/offline-model"))
+
+
+def test_reports_whether_it_is_installed():
+    assert isinstance(offline.is_installed(), bool)

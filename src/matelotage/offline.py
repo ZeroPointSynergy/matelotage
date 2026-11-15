@@ -70,10 +70,17 @@ class OfflineFirst:
     def handle_request(self, request: Any) -> Any:
         try:
             return self.inner.handle_request(request)
-        except Exception:
+        except Exception as original:
             if _disabled:
                 raise
-            answered = _answer_from_index(request)
+            try:
+                answered = _answer_from_index(request)
+            except Exception as exc:
+                # Surfacing *our* exception here would mask the network failure the caller is set up
+                # to handle, so log it and re-raise the original explicitly. (A bare `raise` here
+                # would re-raise the inner exception: it is the one currently being handled.)
+                log.debug("offline fallback failed: %s", exc)
+                raise original from None
             if answered is None:
                 raise
             log.debug(
@@ -129,6 +136,10 @@ def install() -> bool:
 
     _installed = True
     return True
+
+
+def is_installed() -> bool:
+    return _installed
 
 
 def disable() -> None:
